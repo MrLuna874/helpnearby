@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HelpNearby</title>
+<meta name="description" content="Find free and low-cost community help fast: food, health, housing, tutoring and more.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #f7f5f0; --card: #ffffff; --ink: #1d2433; --muted: #5b6475;
+    --line: #e4e0d6; --accent: #1f6f5c; --accent-ink: #ffffff; --soft: #e6f2ee;
+    --warn: #9a4b00; --warn-soft: #fbeedd; --open: #1b7a3a; --closed: #a33a2b; --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151b; --card: #1b2029; --ink: #eef1f6; --muted: #a2abbb;
+      --line: #2c3340; --accent: #4fc2a2; --accent-ink: #0d1a16; --soft: #1e2e2a;
+      --warn: #f0a75c; --warn-soft: #33281b; --open: #5fd38a; --closed: #f08a7a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151b; --card: #1b2029; --ink: #eef1f6; --muted: #a2abbb;
+    --line: #2c3340; --accent: #4fc2a2; --accent-ink: #0d1a16; --soft: #1e2e2a;
+    --warn: #f0a75c; --warn-soft: #33281b; --open: #5fd38a; --closed: #f08a7a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .sr { position: absolute; left: -9999px; }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 8px; }
+  .brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 1.8rem; letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); }
+  .tag { margin: 4px 0 0; color: var(--muted); }
+  .mode { font-size: .78rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .mode.live { color: var(--open); border-color: var(--open); }
+  .mode.demo { color: var(--warn); border-color: var(--warn); }
+  .urgent { background: var(--soft); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; margin: 16px 0; font-size: .95rem; }
+  .search { display: flex; gap: 8px; }
+  input, select, textarea { font: inherit; color: var(--ink); }
+  .search input { flex: 1; min-width: 0; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card); }
+  button, .btn { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); padding: 10px 14px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .6; cursor: wait; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 8px; }
+  .chip { padding: 7px 12px; border-radius: 999px; font-size: .92rem; }
+  .chip[aria-pressed="true"], .seg[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .filters { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: .93rem; margin-bottom: 8px; }
+  .filters label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .filters select, .toolbar select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin: 10px 0; }
+  .toolbar .group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar button { padding: 7px 12px; font-size: .92rem; }
+  .toolbar input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); width: 190px; max-width: 100%; }
+  .seg { border-radius: 8px; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 6px 0 10px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; padding-bottom: 32px; }
+  #map { height: 520px; border-radius: var(--radius); border: 1px solid var(--line); margin-bottom: 32px; z-index: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
+    display: flex; flex-direction: column; gap: 8px; }
+  .card.pending { border-style: dashed; border-color: var(--warn); }
+  .card h3 { margin: 0; font-size: 1.08rem; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { font-size: .78rem; padding: 2px 9px; border-radius: 999px; background: var(--soft); color: var(--ink); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.ok { color: var(--open); }
+  .status { font-size: .85rem; font-weight: 600; }
+  .status.open { color: var(--open); } .status.closed { color: var(--closed); }
+  .card p { margin: 0; color: var(--muted); font-size: .94rem; }
+  .details { font-size: .9rem; display: grid; gap: 2px; }
+  .dist { font-weight: 600; color: var(--accent); }
+  .actions { display: flex; gap: 8px; margin-top: auto; padding-top: 6px; flex-wrap: wrap; }
+  .actions a, .actions button { font-size: .88rem; padding: 7px 11px; text-decoration: none; }
+  .actions a { border: 1px solid var(--line); border-radius: 10px; color: var(--ink); }
+  .save[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); }
+  .empty { text-align: center; padding: 40px 16px; color: var(--muted); grid-column: 1 / -1; }
+  .leaflet-popup-content { font: 14px/1.4 system-ui, sans-serif; }
+  .leaflet-popup-content b { display: block; margin-bottom: 2px; }
+  dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
+    width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 20px; }
+  dialog::backdrop { background: rgb(0 0 0 / .45); }
+  dialog form { display: grid; gap: 10px; }
+  dialog label { display: grid; gap: 4px; font-size: .9rem; color: var(--muted); }
+  dialog input, dialog select, dialog textarea { padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .days { display: flex; gap: 6px; flex-wrap: wrap; }
+  .days label { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; color: var(--ink); }
+  .inline { display: inline-flex !important; flex-direction: row !important; gap: 6px; align-items: center; color: var(--ink) !important; }
+  #pickMap { height: 220px; border-radius: 10px; border: 1px solid var(--line); }
+  .hint { font-size: .82rem; color: var(--muted); margin: 0; }
+  .note { font-size: .85rem; color: var(--warn); margin: 0; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 12px 16px; border-radius: 12px; max-width: calc(100vw - 32px); box-shadow: 0 6px 24px rgb(0 0 0 / .25); z-index: 1000; display: none; }
+  footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; padding: 18px 0 30px; }
+  @media (max-width: 560px) { .two { grid-template-columns: 1fr; } h1 { font-size: 1.5rem; } #map { height: 420px; } }
+  @media print { header .search, .chips, .filters, .toolbar, .actions, footer, #addBtn, #themeBtn, #map, .mode { display: none !important; }
+    #grid { display: grid !important; } .card { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<header class="wrap">
+  <div class="brand">
+    <div>
+      <h1>Help<span>Nearby</span></h1>
+      <p class="tag">Free and low-cost community help, in one place, in under 30 seconds.</p>
+    </div>
+    <div class="row" style="align-items:center">
+      <span id="mode" class="mode">Loading…</span>
+      <button id="addBtn" class="primary" type="button">+ Suggest a place</button>
+      <button id="themeBtn" type="button" aria-label="Toggle dark mode">◐</button>
+    </div>
+  </div>
+
+  <div class="urgent" role="note">
+    <strong>Need help right now?</strong> Call or text <a href="tel:988">988</a> (Suicide &amp; Crisis Lifeline) ·
+    Dial <a href="tel:211">211</a> for local food, housing and utility help ·
+    <a href="tel:911">911</a> for emergencies.
+  </div>
+
+  <form class="search" role="search" onsubmit="return false">
+    <label for="q" class="sr">Search resources</label>
+    <input id="q" type="search" placeholder="Try “hungry”, “free clinic”, “Spanish”, “tutoring”…" autocomplete="off">
+  </form>
+
+  <div class="chips" id="chips" role="group" aria-label="Categories"></div>
+
+  <div class="filters">
+    <label><input type="checkbox" id="fOpen"> Open now</label>
+    <label><input type="checkbox" id="fFree"> Free only</label>
+    <label><input type="checkbox" id="fWalk"> No appointment</label>
+    <label><input type="checkbox" id="fSaved"> My saved list</label>
+    <label>Language <select id="fLang"><option value="">Any</option></select></label>
+  </div>
+
+  <div class="toolbar">
+    <div class="group" role="group" aria-label="View">
+      <button type="button" class="seg" id="vList" aria-pressed="true">☰ List</button>
+      <button type="button" class="seg" id="vMap" aria-pressed="false">🗺️ Map</button>
+    </div>
+    <div class="group">
+      <button type="button" id="locBtn">📍 Use my location</button>
+      <form id="locForm" class="group" onsubmit="return false">
+        <label for="locInput" class="sr">ZIP code or address</label>
+        <input id="locInput" placeholder="or ZIP / address" autocomplete="postal-code">
+        <button type="submit">Go</button>
+      </form>
+      <label class="group" style="color:var(--muted);font-size:.92rem">Sort
+        <select id="sortSel">
+          <option value="open">Open first</option>
+          <option value="near">Nearest first</option>
+          <option value="name">A–Z</option>
+        </select>
+      </label>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="meta">
+    <span id="count" aria-live="polite"></span>
+    <span id="locLabel"></span>
+    <button type="button" id="printBtn">Print / save my list</button>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div id="map" hidden></div>
+</main>
+
+<dialog id="addDlg" aria-labelledby="addTitle">
+  <form id="addForm">
+    <h2 id="addTitle" style="margin:0">Suggest a place</h2>
+    <p class="hint">Know somewhere that helps people? Tell us. A volunteer checks every suggestion before it appears for everyone.</p>
+    <label>Name <input name="name" required minlength="2" maxlength="80" autocomplete="off"></label>
+    <label>Category <select name="category" id="addCat" required></select></label>
+    <label>What do they offer? <textarea name="desc" rows="2" required maxlength="300"></textarea></label>
+    <label>Address <input name="address" id="addAddr" required maxlength="160" placeholder="Street, city, ZIP" autocomplete="off"></label>
+    <div>
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:.9rem;color:var(--muted)">Location on map</span>
+        <button type="button" id="findAddr" style="padding:5px 10px;font-size:.85rem">Find address on map</button>
+      </div>
+      <div id="pickMap" aria-label="Map for choosing the location"></div>
+      <p class="hint" id="pickHint">Click “Find address on map”, or tap the map to drop a pin.</p>
+    </div>
+    <div class="two">
+      <label>Phone <input name="phone" maxlength="30" inputmode="tel" autocomplete="off"></label>
+      <label>Languages (comma separated) <input name="languages" placeholder="English, Spanish" autocomplete="off"></label>
+    </div>
+    <div>
+      <span style="font-size:.9rem;color:var(--muted)">Days open</span>
+      <div class="days" id="daysBox"></div>
+    </div>
+    <div class="two">
+      <label>Opens <input name="open" type="time" value="09:00" required></label>
+      <label>Closes <input name="close" type="time" value="17:00" required></label>
+    </div>
+    <div class="row" style="gap:14px">
+      <label class="inline"><input type="checkbox" name="free" checked> Free</label>
+      <label class="inline"><input type="checkbox" name="walkIn"> Walk-ins welcome</label>
+    </div>
+    <!-- honeypot: bots fill this, people never see it -->
+    <label class="sr" aria-hidden="true">Website <input name="website" tabindex="-1" autocomplete="off"></label>
+    <p class="note" id="formErr" role="alert"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" id="cancelAdd">Cancel</button>
+      <button class="primary" type="submit" id="submitAdd">Submit for review</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<footer class="wrap">
+  <p><strong>Prototype notice:</strong> listings marked “Sample” are fictional demo data. Always call ahead to confirm hours and eligibility.
+  Hotlines 988, 211 and 911 are real US services.</p>
+  <p>Map data © OpenStreetMap contributors. Map tiles: OpenStreetMap, Esri or Humanitarian OSM Team. Built for NextSpark Hacks 2026.</p>
+</footer>
+
+<script>
+// ===================== CONFIG =====================
+// Paste your Supabase Project URL and anon/publishable key here.
+// The anon key is designed to be public; database security rules (see setup.sql) protect the data.
+// Leave blank to run in demo mode with built-in sample data.
+const CONFIG = {
+  SUPABASE_URL: "https://dzbrxzjntzhctnjgoone.supabase.co",
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6YnJ4empudHpoY3Ruamdvb25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwNjEyOTYsImV4cCI6MjEwODYzNzI5Nn0.JgD_Yl3wRbG5P4KRB-E1PBcb1r0nYvcT8YOcj3pBs74",
+  MAP_CENTER: [39.9526, -75.1652], // default map center (Philadelphia); change for your city
+  MAP_ZOOM: 13
+};
+// ==================================================
+
+const CATEGORIES = [
+  { id: "food", label: "🍎 Food" },
+  { id: "health", label: "🩺 Health" },
+  { id: "mental", label: "💬 Mental health" },
+  { id: "housing", label: "🏠 Housing" },
+  { id: "education", label: "📚 Tutoring & learning" },
+  { id: "jobs", label: "💼 Jobs" },
+  { id: "legal", label: "⚖️ Legal aid" },
+  { id: "tech", label: "💻 Internet & devices" }
+];
+
+// Fictional sample listings (used in demo mode; setup.sql seeds the same rows into the database).
+// Days: 0=Sun … 6=Sat.
+const WEEKDAYS = [1,2,3,4,5], ALL = [0,1,2,3,4,5,6];
+const SAMPLE = [
+  { id:"s1", name:"Northside Community Pantry", category:"food", desc:"Groceries and fresh produce boxes for anyone who needs them. No ID required.", address:"120 Elm St", phone:"(555) 010-1100", languages:["English","Spanish"], free:true, walkIn:true, days:[2,4,6], open:"10:00", close:"14:00", lat:39.9762, lng:-75.1497 },
+  { id:"s2", name:"Hope Kitchen Free Dinners", category:"food", desc:"Hot sit-down dinner every evening. Families and students welcome.", address:"48 Market Ave", phone:"(555) 010-1200", languages:["English"], free:true, walkIn:true, days:ALL, open:"17:00", close:"19:30", lat:39.9461, lng:-75.1668 },
+  { id:"s3", name:"Campus Fridge Share", category:"food", desc:"24/7 community fridge: take what you need, leave what you can.", address:"Student Union, ground floor", phone:"", languages:["English"], free:true, walkIn:true, days:ALL, open:"00:00", close:"23:59", lat:39.9522, lng:-75.1932 },
+  { id:"s4", name:"Riverside Free Clinic", category:"health", desc:"Primary care, checkups and prescriptions for uninsured adults.", address:"900 River Rd", phone:"(555) 010-2100", languages:["English","Spanish","Vietnamese"], free:true, walkIn:false, days:WEEKDAYS, open:"08:30", close:"16:30", lat:39.9389, lng:-75.1795 },
+  { id:"s5", name:"SmileBright Sliding-Scale Dental", category:"health", desc:"Cleanings and fillings priced by income.", address:"33 Oak Plaza", phone:"(555) 010-2200", languages:["English","Mandarin"], free:false, walkIn:false, days:[1,3,5], open:"09:00", close:"17:00", lat:39.9620, lng:-75.1420 },
+  { id:"s6", name:"Teen & Young Adult Counseling Center", category:"mental", desc:"Free short-term counseling for ages 13–24. Same-week appointments.", address:"210 Pine St, Suite 4", phone:"(555) 010-3100", languages:["English","Spanish"], free:true, walkIn:false, days:WEEKDAYS, open:"11:00", close:"19:00", lat:39.9502, lng:-75.1453 },
+  { id:"s7", name:"Open Door Peer Support Drop-in", category:"mental", desc:"Talk with trained peers in a relaxed space. Just show up.", address:"77 Library Ln", phone:"(555) 010-3200", languages:["English","Arabic"], free:true, walkIn:true, days:[1,3,6], open:"15:00", close:"20:00", lat:39.9585, lng:-75.1720 },
+  { id:"s8", name:"Safe Harbor Emergency Shelter", category:"housing", desc:"Emergency beds, showers and meals. Intake open overnight.", address:"5 Harbor Way", phone:"(555) 010-4100", languages:["English","Spanish"], free:true, walkIn:true, days:ALL, open:"00:00", close:"23:59", lat:39.9330, lng:-75.1550 },
+  { id:"s9", name:"Tenant Help Desk", category:"legal", desc:"Free advice on leases, repairs and eviction notices.", address:"City Hall Annex, Rm 12", phone:"(555) 010-5100", languages:["English","Spanish","Haitian Creole"], free:true, walkIn:true, days:[2,4], open:"13:00", close:"18:00", lat:39.9530, lng:-75.1636 },
+  { id:"s10", name:"Homework Help Hub", category:"education", desc:"Volunteer tutors for K–12 math, reading and science.", address:"Central Library, 2nd floor", phone:"(555) 010-6100", languages:["English","Spanish","Mandarin"], free:true, walkIn:true, days:[1,2,3,4], open:"15:30", close:"18:30", lat:39.9599, lng:-75.1710 },
+  { id:"s11", name:"Adult ESL & GED Classes", category:"education", desc:"Evening English and GED prep classes. Childcare available.", address:"Lincoln High, Room 108", phone:"(555) 010-6200", languages:["English","Spanish","Portuguese"], free:true, walkIn:false, days:[1,3], open:"18:00", close:"20:30", lat:39.9811, lng:-75.1625 },
+  { id:"s12", name:"Career Launch Center", category:"jobs", desc:"Resume help, mock interviews and job listings.", address:"400 Main St", phone:"(555) 010-7100", languages:["English"], free:true, walkIn:true, days:WEEKDAYS, open:"09:00", close:"17:00", lat:39.9475, lng:-75.1520 },
+  { id:"s13", name:"Digital Access Desk", category:"tech", desc:"Free computer use, Wi-Fi, and help signing up for low-cost internet.", address:"Central Library, 1st floor", phone:"(555) 010-8100", languages:["English","Spanish"], free:true, walkIn:true, days:[1,2,3,4,5,6], open:"10:00", close:"20:00", lat:39.9605, lng:-75.1695 },
+  { id:"s14", name:"Laptop Loaner Program", category:"tech", desc:"Borrow a laptop for up to 8 weeks for school or job search.", address:"Community College, Bldg C", phone:"(555) 010-8200", languages:["English"], free:true, walkIn:false, days:WEEKDAYS, open:"09:00", close:"15:00", lat:39.9900, lng:-75.1550 }
+].map(r => ({ ...r, sample: true }));
+
+// ---------- storage helpers (safe if storage is blocked) ----------
+const store = {
+  get(k, fallback) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch { return fallback; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+// ---------- database ----------
+const live = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY && window.supabase);
+// Pass headers as a plain object: some embedded previews relay fetch() and can't handle Headers objects.
+const plainFetch = (input, init = {}) => {
+  const h = init.headers;
+  const headers = h && typeof h.forEach === "function" && !Array.isArray(h) ? (() => { const o = {}; h.forEach((v, k) => o[k] = v); return o; })() : h;
+  return fetch(input, { ...init, headers });
+};
+const db = live ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { global: { fetch: plainFetch } }) : null;
+
+const fromRow = r => ({
+  id: r.id, name: r.name, category: r.category, desc: r.description, address: r.address || "", phone: r.phone || "",
+  languages: r.languages && r.languages.length ? r.languages : ["English"], free: !!r.free, walkIn: !!r.walk_in,
+  days: r.days || WEEKDAYS, open: r.open_time || "09:00", close: r.close_time || "17:00",
+  lat: r.lat, lng: r.lng, sample: !!r.is_sample, verifiedAt: r.verified_at
+});
+const toRow = r => ({
+  id: r.id, name: r.name, category: r.category, description: r.desc, address: r.address, phone: r.phone,
+  languages: r.languages, free: r.free, walk_in: r.walkIn, days: r.days, open_time: r.open, close_time: r.close,
+  lat: r.lat, lng: r.lng, status: "pending"
+});
+
+let resources = [];                        // approved listings everyone sees
+let myPending = store.get("hn-pending", []); // my own submissions awaiting review (only visible to me)
+let saved = new Set(store.get("hn-saved", []));
+let userLoc = null;                        // { lat, lng, label }
+const state = { q: "", cat: "", open: false, free: false, walk: false, saved: false, lang: "", sort: "open", view: "list" };
+
+async function loadData() {
+  if (!db) { resources = SAMPLE; setMode("demo"); return; }
+  const { data, error } = await db.from("resources").select("*").eq("status", "approved");
+  if (error) { console.error("HelpNearby load error:", errText(error)); resources = SAMPLE; setMode("error", errText(error)); return; }
+  resources = data.map(fromRow);
+  // drop my pending copies once a volunteer has approved them
+  const approvedIds = new Set(resources.map(r => r.id));
+  const before = myPending.length;
+  myPending = myPending.filter(p => !approvedIds.has(p.id));
+  if (myPending.length !== before) { store.set("hn-pending", myPending); toast("🎉 One of your suggestions was verified and is now live for everyone!"); }
+  setMode("live");
+}
+function errText(e) {
+  if (!e) return "unknown error";
+  if (typeof e === "string") return e;
+  return [e.message, e.details, e.hint, e.code && `(code ${e.code})`].filter(Boolean).join(" ") || JSON.stringify(e);
+}
+function setMode(m, detail) {
+  const el = $("mode");
+  el.title = detail || "";
+  el.className = "mode " + (m === "live" ? "live" : "demo");
+  el.textContent = m === "live" ? "● Live shared database" : m === "error" ? "⚠ Database error, showing sample data: " + (detail || "") : "Demo mode (sample data)";
+}
+
+// ---------- open-now logic ----------
+const toMin = t => { const [h, m] = String(t).split(":").map(Number); return h * 60 + m; };
+function isOpen(r, now = new Date()) {
+  if (!r.days.includes(now.getDay())) return false;
+  const m = now.getHours() * 60 + now.getMinutes();
+  return m >= toMin(r.open) && m <= toMin(r.close);
+}
+const fmt = t => { const [h, m] = String(t).split(":").map(Number); const ap = h >= 12 ? "pm" : "am"; const hh = h % 12 || 12; return m ? `${hh}:${String(m).padStart(2,"0")}${ap}` : `${hh}${ap}`; };
+const DAYN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function daysText(d) {
+  const s = [...d].sort().join();
+  if (d.length === 7) return "Every day";
+  if (s === "1,2,3,4,5") return "Mon–Fri";
+  return [...d].sort().map(x => DAYN[x]).join(", ");
+}
+function hoursText(r) { return toMin(r.open) === 0 && toMin(r.close) >= 1439 ? `${daysText(r.days)}, 24 hours` : `${daysText(r.days)}, ${fmt(r.open)}–${fmt(r.close)}`; }
+
+// ---------- distance ----------
+function miles(a, b) {
+  const R = 3958.8, rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const hasLoc = r => typeof r.lat === "number" && typeof r.lng === "number";
+const distOf = r => (userLoc && hasLoc(r)) ? miles(userLoc, r) : null;
+const distText = d => d == null ? "" : d < 0.1 ? "< 0.1 mi" : `${d.toFixed(d < 10 ? 1 : 0)} mi`;
+
+// ---------- search: everyday words map to categories ----------
+const SYN = { hungry:"food", groceries:"food", meal:"food", meals:"food", doctor:"health", clinic:"health", sick:"health", dentist:"health",
+  therapy:"mental", counselor:"mental", counseling:"mental", anxiety:"mental", depressed:"mental", sad:"mental", shelter:"housing", homeless:"housing",
+  rent:"housing", eviction:"legal", lawyer:"legal", homework:"education", tutor:"education", english:"education", job:"jobs", work:"jobs",
+  resume:"jobs", wifi:"tech", internet:"tech", laptop:"tech", computer:"tech" };
+function matches(r, q) {
+  if (!q) return true;
+  const hay = [r.name, r.desc, r.address, r.category, ...r.languages, r.free ? "free" : "", r.walkIn ? "walk-in walk in" : ""].join(" ").toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w) || (SYN[w] && r.category === SYN[w]));
+}
+
+// ---------- UI helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const catLabel = id => (CATEGORIES.find(c => c.id === id) || {}).label || id;
+let toastTimer;
+function toast(msg, ms = 4500) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.display = "none", ms); }
+
+function buildChips() {
+  $("chips").innerHTML = [{ id:"", label:"All" }, ...CATEGORIES].map(c =>
+    `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${state.cat === c.id}">${c.label}</button>`).join("");
+}
+$("chips").onclick = e => { const b = e.target.closest("button"); if (!b) return; state.cat = b.dataset.cat; buildChips(); render(); };
+function buildLangs() {
+  const langs = [...new Set([...resources, ...myPending].flatMap(r => r.languages))].sort();
+  const cur = state.lang;
+  $("fLang").innerHTML = `<option value="">Any</option>` + langs.map(l => `<option ${l === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
+}
+
+function filtered() {
+  const list = [...myPending.map(p => ({ ...p, pending: true })), ...resources].filter(r =>
+    (!state.cat || r.category === state.cat) &&
+    (!state.open || isOpen(r)) && (!state.free || r.free) && (!state.walk || r.walkIn) &&
+    (!state.saved || saved.has(r.id)) && (!state.lang || r.languages.includes(state.lang)) && matches(r, state.q));
+  const byOpen = (a, b) => isOpen(b) - isOpen(a);
+  const byDist = (a, b) => (distOf(a) ?? Infinity) - (distOf(b) ?? Infinity);
+  if (state.sort === "near" && userLoc) list.sort((a, b) => byDist(a, b) || byOpen(a, b));
+  else if (state.sort === "name") list.sort((a, b) => a.name.localeCompare(b.name));
+  else list.sort((a, b) => byOpen(a, b) || (userLoc ? byDist(a, b) : 0));
+  return list;
+}
+
+function directionsUrl(r) {
+  if (hasLoc(r)) return `https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}`;
+  return r.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.address)}` : "";
+}
+
+function cardHtml(r) {
+  const open = isOpen(r), d = distOf(r), dir = directionsUrl(r);
+  return `<article class="card ${r.pending ? "pending" : ""}">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <span class="pill">${catLabel(r.category)}</span>
+      <span class="status ${open ? "open" : "closed"}">${open ? "● Open now" : "○ Closed now"}</span>
+    </div>
+    <h3>${esc(r.name)}</h3>
+    <p>${esc(r.desc)}</p>
+    <div class="details">
+      ${d != null ? `<span class="dist">📏 ${distText(d)} away</span>` : ""}
+      <span>🕑 ${esc(hoursText(r))}</span>
+      ${r.address ? `<span>📍 ${esc(r.address)}</span>` : ""}
+      <span>🗣️ ${esc(r.languages.join(", "))}</span>
+    </div>
+    <div class="row">
+      ${r.free ? `<span class="pill">Free</span>` : `<span class="pill">Low cost</span>`}
+      ${r.walkIn ? `<span class="pill">Walk-ins OK</span>` : `<span class="pill">Call first</span>`}
+      ${r.pending ? `<span class="pill warn">⏳ Waiting for verification · only you can see this</span>` : ""}
+      ${r.sample ? `<span class="pill warn">Sample listing</span>` : ""}
+      ${r.verifiedAt && !r.sample ? `<span class="pill ok">✔ Verified ${new Date(r.verifiedAt).toLocaleDateString()}</span>` : ""}
+    </div>
+    <div class="actions">
+      ${r.phone ? `<a href="tel:${esc(r.phone.replace(/[^\d+]/g, ""))}">📞 Call</a>` : ""}
+      ${dir ? `<a href="${dir}" target="_blank" rel="noopener">🧭 Directions</a>` : ""}
+      ${hasLoc(r) ? `<button type="button" class="onmap" data-id="${esc(r.id)}">🗺️ On map</button>` : ""}
+      ${r.pending ? `<button type="button" class="withdraw" data-id="${esc(r.id)}">Hide</button>`
+                  : `<button type="button" class="save" data-id="${esc(r.id)}" aria-pressed="${saved.has(r.id)}">${saved.has(r.id) ? "★ Saved" : "☆ Save"}</button>`}
+    </div>
+  </article>`;
+}
+
+function render() {
+  const list = filtered();
+  $("count").textContent = `${list.length} place${list.length === 1 ? "" : "s"} found`;
+  $("locLabel").innerHTML = userLoc
+    ? `📍 Distances from <strong>${esc(userLoc.label)}</strong> · <button type="button" id="clearLoc" style="padding:2px 8px;font-size:.85rem">Change</button>` : "";
+  $("grid").innerHTML = list.length ? list.map(cardHtml).join("")
+    : `<div class="empty"><p><strong>No matches.</strong> Try fewer filters, or call <a href="tel:211">211</a> to talk to a person who can help.</p></div>`;
+  if (state.view === "map") renderMap(list);
+}
+
+// ---------- map ----------
+let map, markerLayer, youMarker;
+const markers = {};
+// Map tiles: several free providers, tried in order; switches automatically if one is blocked.
+// OpenStreetMap needs a real website (it rejects pages opened from a file), so it's first only on http(s).
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const TILE_SOURCES = [
+  { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opts: { maxZoom: 19, attribution: OSM_ATTR }, needsSite: true },
+  { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    opts: { maxZoom: 19, attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, " + OSM_ATTR } },
+  { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", opts: { maxZoom: 19, subdomains: "abc", attribution: OSM_ATTR + ", Humanitarian OSM Team" } }
+];
+const onRealSite = /^https?:$/.test(location.protocol) && location.hostname && location.hostname !== "localhost";
+const tileOrder = TILE_SOURCES.filter(t => !t.needsSite || onRealSite);
+function tiles() {
+  // returns an object with addTo(map) that installs the first working provider, falling back on errors
+  return { addTo(m) {
+    let i = 0, layer, errors = 0, loaded = 0;
+    const use = n => {
+      if (layer) m.removeLayer(layer);
+      errors = 0; loaded = 0;
+      layer = L.tileLayer(tileOrder[n].url, tileOrder[n].opts)
+        .on("tileload", () => loaded++)
+        .on("tileerror", () => { errors++; if (errors >= 3 && loaded === 0 && i < tileOrder.length - 1) use(++i); })
+        .addTo(m);
+    };
+    use(0);
+    return m;
+  } };
+}
+function ensureMap() {
+  if (map || !window.L) return !!map;
+  map = L.map("map").setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
+  tiles().addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+  return true;
+}
+function popupHtml(r) {
+  const d = distOf(r), dir = directionsUrl(r);
+  return `<b>${esc(r.name)}</b>${catLabel(r.category)}<br>
+    <span style="color:${isOpen(r) ? "#1b7a3a" : "#a33a2b"};font-weight:600">${isOpen(r) ? "Open now" : "Closed now"}</span>
+    · ${esc(hoursText(r))}${d != null ? `<br>📏 ${distText(d)} away` : ""}
+    ${r.pending ? "<br><i>Waiting for verification</i>" : ""}
+    <br>${r.phone ? `<a href="tel:${esc(r.phone.replace(/[^\d+]/g, ""))}">Call</a> · ` : ""}${dir ? `<a href="${dir}" target="_blank" rel="noopener">Directions</a>` : ""}`;
+}
+function renderMap(list, fit = false) {
+  if (!ensureMap()) { $("map").innerHTML = `<p class="empty">The map couldn't load (are you offline?). The list view still works.</p>`; return; }
+  markerLayer.clearLayers();
+  for (const k in markers) delete markers[k];
+  const pts = [];
+  list.filter(hasLoc).forEach(r => {
+    const open = isOpen(r);
+    const m = L.circleMarker([r.lat, r.lng], {
+      radius: 9, weight: 2, color: "#ffffff", fillOpacity: .95,
+      fillColor: r.pending ? "#c27a1a" : open ? "#1f8a4c" : "#8a93a3"
+    }).bindPopup(popupHtml(r)).bindTooltip(r.name);
+    m.addTo(markerLayer); markers[r.id] = m; pts.push([r.lat, r.lng]);
+  });
+  if (userLoc) {
+    if (youMarker) youMarker.remove();
+    youMarker = L.circleMarker([userLoc.lat, userLoc.lng], { radius: 8, color: "#ffffff", weight: 3, fillColor: "#2563eb", fillOpacity: 1 })
+      .bindTooltip("You", { permanent: false }).addTo(map);
+    pts.push([userLoc.lat, userLoc.lng]);
+  }
+  if (fit && pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+}
+function setView(v) {
+  state.view = v;
+  $("vList").setAttribute("aria-pressed", v === "list");
+  $("vMap").setAttribute("aria-pressed", v === "map");
+  $("grid").hidden = v !== "list";
+  $("map").hidden = v !== "map";
+  if (v === "map") { const list = filtered(); renderMap(list, true); setTimeout(() => map && map.invalidateSize(), 50); }
+}
+$("vList").onclick = () => setView("list");
+$("vMap").onclick = () => setView("map");
+
+// ---------- location ----------
+// Address / ZIP lookup with OpenStreetMap Nominatim.
+// A bare ZIP uses the dedicated postal-code search (free-text search can confuse it with street numbers);
+// street addresses are biased toward the area the map covers.
+async function nominatim(params) {
+  const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&" + new URLSearchParams(params);
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error("lookup failed");
+  const data = await res.json();
+  return data[0] || null;
+}
+function placeName(a = {}) {
+  const town = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || "";
+  const st = a.state ? (a["ISO3166-2-lvl4"] || "").replace("US-", "") || a.state : "";
+  return [town, st].filter(Boolean).join(", ");
+}
+async function geocode(q) {
+  q = q.trim();
+  const zip = (q.match(/^\s*(\d{5})(?:-\d{4})?\s*$/) || [])[1];
+  let hit;
+  if (zip) {
+    hit = await nominatim({ postalcode: zip, country: "us" });
+    if (!hit) hit = await nominatim({ q: `${zip}, USA`, countrycodes: "us" });
+  } else {
+    const [lat, lng] = userLoc ? [userLoc.lat, userLoc.lng] : CONFIG.MAP_CENTER, d = 0.6;
+    hit = await nominatim({ q, countrycodes: "us", viewbox: `${lng - d},${lat + d},${lng + d},${lat - d}` });
+  }
+  if (!hit) return null;
+  const where = placeName(hit.address);
+  const label = zip ? `ZIP ${zip}${where ? ` (${where})` : ""}`
+    : hit.display_name.split(",").slice(0, 3).join(",").trim();
+  return { lat: +hit.lat, lng: +hit.lon, label, full: hit.display_name };
+}
+function setUserLoc(loc) {
+  userLoc = loc; state.sort = "near"; $("sortSel").value = "near";
+  render(); if (state.view === "map") renderMap(filtered(), true);
+}
+$("locBtn").onclick = () => {
+  if (!navigator.geolocation) return toast("Your browser can't share location. Type a ZIP code instead.");
+  $("locBtn").disabled = true; $("locBtn").textContent = "📍 Locating…";
+  navigator.geolocation.getCurrentPosition(
+    p => { $("locBtn").disabled = false; $("locBtn").textContent = "📍 Use my location";
+           setUserLoc({ lat: p.coords.latitude, lng: p.coords.longitude, label: "your location" }); },
+    () => { $("locBtn").disabled = false; $("locBtn").textContent = "📍 Use my location";
+            toast("Couldn't get your location. Type a ZIP code or address instead."); },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+};
+$("locForm").onsubmit = async e => {
+  e.preventDefault();
+  const q = $("locInput").value.trim(); if (!q) return;
+  try {
+    const loc = await geocode(q);
+    if (!loc) return toast("Couldn't find that place. Check the ZIP code or try a full street address.");
+    setUserLoc(loc);
+    toast(`📍 Using ${loc.label}. Not right? Type your full street address instead.`, 6000);
+  }
+  catch { toast("Location lookup isn't available right now."); }
+};
+$("locLabel").onclick = e => {
+  if (!e.target.closest("#clearLoc")) return;
+  userLoc = null; if (youMarker) { youMarker.remove(); youMarker = null; }
+  state.sort = "open"; $("sortSel").value = "open"; render();
+  $("locInput").focus();
+};
+$("sortSel").onchange = e => {
+  state.sort = e.target.value;
+  if (state.sort === "near" && !userLoc) toast("Tap “Use my location” or enter a ZIP to sort by distance.");
+  render();
+};
+
+// ---------- list interactions ----------
+$("grid").onclick = e => {
+  const s = e.target.closest(".save"), w = e.target.closest(".withdraw"), m = e.target.closest(".onmap");
+  if (s) { const id = s.dataset.id; saved.has(id) ? saved.delete(id) : saved.add(id); store.set("hn-saved", [...saved]); render(); }
+  if (w) { myPending = myPending.filter(p => p.id !== w.dataset.id); store.set("hn-pending", myPending); render(); }
+  if (m) { const id = m.dataset.id; setView("map"); setTimeout(() => { const mk = markers[id]; if (mk) { map.setView(mk.getLatLng(), 16); mk.openPopup(); } }, 120); }
+};
+$("q").oninput = e => { state.q = e.target.value.trim(); render(); };
+$("fOpen").onchange = e => { state.open = e.target.checked; render(); };
+$("fFree").onchange = e => { state.free = e.target.checked; render(); };
+$("fWalk").onchange = e => { state.walk = e.target.checked; render(); };
+$("fSaved").onchange = e => { state.saved = e.target.checked; render(); };
+$("fLang").onchange = e => { state.lang = e.target.value; render(); };
+$("printBtn").onclick = () => { if (state.view === "map") setView("list"); window.print(); };
+
+// theme toggle
+let theme = store.get("hn-theme", "");
+if (theme) document.documentElement.dataset.theme = theme;
+$("themeBtn").onclick = () => {
+  const dark = theme ? theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  theme = dark ? "light" : "dark"; document.documentElement.dataset.theme = theme; store.set("hn-theme", theme);
+};
+
+// ---------- suggest-a-place form ----------
+$("addCat").innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${c.label}</option>`).join("");
+$("daysBox").innerHTML = DAYN.map((d, i) => `<label><input type="checkbox" name="day" value="${i}" ${i >= 1 && i <= 5 ? "checked" : ""}> ${d}</label>`).join("");
+
+let pickMap, pickPin, picked = null;
+function setPick(lat, lng, note) {
+  picked = { lat, lng };
+  if (!window.L || !pickMap) { $("pickHint").textContent = "📌 Location found."; return; }
+  if (pickPin) pickPin.setLatLng([lat, lng]); else pickPin = L.marker([lat, lng], { draggable: true }).addTo(pickMap)
+    .on("dragend", e => { const p = e.target.getLatLng(); picked = { lat: p.lat, lng: p.lng }; });
+  pickMap.setView([lat, lng], 16);
+  $("pickHint").textContent = note || "📌 Pin placed. Drag it to adjust if needed.";
+}
+$("addBtn").onclick = () => {
+  $("formErr").textContent = "";
+  $("addDlg").showModal();
+  if (window.L && !pickMap) {
+    pickMap = L.map("pickMap").setView(userLoc ? [userLoc.lat, userLoc.lng] : CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
+    tiles().addTo(pickMap);
+    pickMap.on("click", e => setPick(e.latlng.lat, e.latlng.lng));
+  }
+  setTimeout(() => pickMap && pickMap.invalidateSize(), 60);
+};
+$("findAddr").onclick = async () => {
+  const q = $("addAddr").value.trim();
+  if (!q) { $("pickHint").textContent = "Type the address first."; return; }
+  $("pickHint").textContent = "Searching…";
+  try {
+    const loc = await geocode(q);
+    loc ? setPick(loc.lat, loc.lng, `📌 Found: ${loc.full}. Is the pin on the right building? If not, drag it or tap the right spot.`)
+        : ($("pickHint").textContent = "Address not found. Add the city and ZIP, or tap the map to drop a pin.");
+  }
+  catch { $("pickHint").textContent = "Lookup unavailable. Tap the map to drop a pin instead."; }
+};
+$("cancelAdd").onclick = () => $("addDlg").close();
+
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
+  "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); }));
+
+$("addForm").onsubmit = async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  $("formErr").textContent = "";
+  const days = f.getAll("day").map(Number);
+  if (!days.length) return ($("formErr").textContent = "Pick at least one day it's open.");
+  if (!picked) { // place it from the address, then let the person confirm the pin before sending
+    try {
+      const loc = await geocode(f.get("address"));
+      if (loc && window.L && pickMap) {
+        setPick(loc.lat, loc.lng, `📌 Found: ${loc.full}. Check the pin, drag it if needed.`);
+        return ($("formErr").textContent = "We placed a pin from the address. Check it's in the right spot, then press Submit again.");
+      }
+      if (loc) picked = { lat: loc.lat, lng: loc.lng };
+    } catch {}
+  }
+  if (!picked && window.L) return ($("formErr").textContent = "We couldn't find that address. Tap the map to drop a pin where it is.");
+  if (f.get("website")) { $("addDlg").close(); return toast("Thanks! Your suggestion was sent for review."); } // honeypot
+
+  const r = {
+    id: uuid(), name: f.get("name").trim(), category: f.get("category"), desc: f.get("desc").trim(),
+    address: f.get("address").trim(), phone: f.get("phone").trim(),
+    languages: (f.get("languages") || "").split(",").map(s => s.trim()).filter(Boolean),
+    free: !!f.get("free"), walkIn: !!f.get("walkIn"), days, open: f.get("open"), close: f.get("close"),
+    lat: picked ? +picked.lat.toFixed(6) : null, lng: picked ? +picked.lng.toFixed(6) : null
+  };
+  if (!r.languages.length) r.languages = ["English"];
+
+  const btn = $("submitAdd"); btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    if (db) {
+      const { error } = await db.from("resources").insert(toRow(r));
+      if (error) throw error;
+    }
+    myPending.unshift(r); store.set("hn-pending", myPending);
+    e.target.reset(); $("daysBox").querySelectorAll("input").forEach((c, i) => c.checked = i >= 1 && i <= 5);
+    picked = null; if (pickPin) { pickPin.remove(); pickPin = null; }
+    $("pickHint").textContent = "Click “Find address on map”, or tap the map to drop a pin.";
+    $("addDlg").close(); buildLangs(); render();
+    toast(db ? "✅ Thanks! A volunteer will verify it, then it appears for everyone." : "Saved on this device (demo mode). Connect the database to share suggestions.", 6000);
+  } catch (err) {
+    console.error("HelpNearby submit error:", errText(err));
+    $("formErr").textContent = "Couldn't send: " + errText(err);
+  } finally { btn.disabled = false; btn.textContent = "Submit for review"; }
+};
+
+// ---------- start ----------
+(async function start() {
+  buildChips();
+  $("grid").innerHTML = `<div class="empty">Loading places…</div>`;
+  await loadData();
+  buildLangs(); render();
+  setInterval(render, 60000);                  // keep "open now" fresh
+  if (db) setInterval(async () => { await loadData(); buildLangs(); render(); }, 120000); // pick up newly verified places
+})();
+</script>
+</body>
+</html>
