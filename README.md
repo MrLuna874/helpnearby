@@ -6,6 +6,8 @@ People who need help with food, healthcare, housing or school often don't know w
 
 Community members can suggest places they know, and **every suggestion is verified by a volunteer before anyone else sees it.**
 
+**Live demo:** https://mrluna874.github.io/helpnearby/
+
 Built for **NextSpark Hacks 2026**.
 
 > ⚠️ **Prototype notice:** listings marked "Sample" are **fictional demo data**. The hotlines shown (988, 211, 911) are real US services.
